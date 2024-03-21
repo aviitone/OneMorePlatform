@@ -5,16 +5,27 @@ using UnityEngine;
 public class PlayerMove : MonoBehaviour
 {
     private float horiz;
-    public Animator animator;
+    private float vert;
+    public Animator _animator;
 
     [Header("GENERIC")]
     [SerializeField] private float speed;
     [SerializeField] private float jumpForce;
     [SerializeField] private float GravScale;
     private bool isAirbourne;
+    [SerializeField] private bool _active = true;
 
     private bool isFacingRight = true;
     private int maxJumps = 2;
+
+    [Header("DASHING")]
+    private TrailRenderer _trailRenderer;
+    //
+    [SerializeField] private float _dashVel = 15f;
+    [SerializeField] private float _dashTime = 0.4f;
+    private Vector2 _dashDir;
+    private bool _isDashing;
+    private bool _canDash = true;
 
     //Wall jumping stuff
     private bool isWallJumping;
@@ -32,7 +43,7 @@ public class PlayerMove : MonoBehaviour
 
 
     [Header("COMPONENTS/CHECKS")]
-    [SerializeField] private Rigidbody2D rb;
+    [SerializeField] private Rigidbody2D _rb;
     [SerializeField] private Transform groundCheck;
     [SerializeField] private LayerMask groundLayer;
     [SerializeField] private Transform wallCheck;
@@ -52,21 +63,57 @@ public class PlayerMove : MonoBehaviour
 
     private int JumpsLeft;
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     //START
     private void Start()
     {
+        _trailRenderer = GetComponent<TrailRenderer>();
         maxJumps = 2;
         isAirbourne = false;
-}
+    }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
     private void Update()
     {
 
+        if (!_active)
+        {
+            return;
+        }
+
+        //VARs
+        var dashInput = Input.GetButtonDown("Dash");
+
+        //DASHING
+        if (dashInput && _canDash)
+        {
+            _isDashing = true;
+            _canDash = false;
+            _trailRenderer.emitting = true;
+            _dashDir = new Vector2(horiz, vert);
+
+            if (_dashDir == Vector2.zero)
+            {
+                //backup dash dir
+                _dashDir = new Vector2(transform.localScale.x, 0);
+            }
+            StartCoroutine(StopDashing());
+        }
+
+        if (_isDashing)
+        {
+            _rb.velocity = _dashDir.normalized * _dashVel;
+            return;
+        }
+
+
         horiz = Input.GetAxisRaw("Horizontal");
+        vert = Input.GetAxisRaw("Vertical");
 
         //JUMP TRIGGER
         if (Input.GetButtonDown("Jump") && JumpsLeft > 0)
         {
-            rb.velocity = new Vector2(rb.velocity.x, jumpForce);
+            _rb.velocity = new Vector2(_rb.velocity.x, jumpForce);
             JumpsLeft -= 1;
         }
 
@@ -81,6 +128,7 @@ public class PlayerMove : MonoBehaviour
             coyoteTimeCounter = coyoteTime;
             JumpsLeft = maxJumps;
             isAirbourne = false;
+            _canDash = true;
         }
         else
         {
@@ -88,14 +136,14 @@ public class PlayerMove : MonoBehaviour
             coyoteTimeCounter -= Time.deltaTime;
         }
 
-        if (IsGrounded() && rb.velocity.y <= 0)
+        if (IsGrounded() && _rb.velocity.y <= 0)
         {
             JumpsLeft = maxJumps;
         }
 
-        if (Input.GetButtonUp("Jump") && rb.velocity.y > 0f)
+        if (Input.GetButtonUp("Jump") && _rb.velocity.y > 0f)
         {
-            rb.velocity = new Vector2(rb.velocity.x, rb.velocity.y * 0.5f);
+            _rb.velocity = new Vector2(_rb.velocity.x, _rb.velocity.y * 0.5f);
         }
 
         WallSlide();
@@ -107,10 +155,14 @@ public class PlayerMove : MonoBehaviour
         }
     }
 
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+
     private bool IsGrounded()
     {
         return Physics2D.OverlapCircle(groundCheck.position, 0.2f, groundLayer);
     }
+
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void FixedUpdate()
     {
@@ -123,50 +175,61 @@ public class PlayerMove : MonoBehaviour
         {
             float targetSpeed = horiz * speed;
             //finds player max-speed
-            float speedDif = targetSpeed - rb.velocity.x;
+            float speedDif = targetSpeed - _rb.velocity.x;
             //finds force needed to get there
             float accelRate = (Mathf.Abs(targetSpeed) > 0.01f) ? acceleration : deceleration;
             //applys that speed to speed diff
             float movement = Mathf.Pow(Mathf.Abs(speedDif) * accelRate, velPower) * Mathf.Sign(speedDif);
 
             //applys that to player
-            rb.AddForce(movement * Vector2.right);
+            _rb.AddForce(movement * Vector2.right);
 
-            animator.SetFloat("Speed", Mathf.Abs(movement));
+            _animator.SetFloat("Speed", Mathf.Abs(movement));
         }
 
-        if (rb.velocity.y < 0)
+        if (_rb.velocity.y < 0)
         {
-            rb.gravityScale = GravScale * 1.5f;
+            _rb.gravityScale = GravScale * 1.5f;
         }
 
         if (isAirbourne == true)
         {
-            animator.SetBool("IsJumping", true);
+            _animator.SetBool("IsJumping", true);
         }
         else
         {
-            animator.SetBool("IsJumping", false);
+            _animator.SetBool("IsJumping", false);
         }
     }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
-        //WALL SLIDE STUFF
-        private bool isWalled()
+    private IEnumerator StopDashing()
+    {
+        yield return new WaitForSeconds(_dashTime);
+        _trailRenderer.emitting = false;
+        _isDashing = false;
+    }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
+    
+    //WALL SLIDE STUFF
+    private bool isWalled()
     {
         return Physics2D.OverlapCircle(wallCheck.position, 0.2f, wallLayer);
     }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void WallSlide()
     {
         if (isWalled() && !IsGrounded() && horiz != 0f){ 
             isWallSliding = true;
-            rb.velocity = new Vector2(rb.velocity.x, Mathf.Clamp(rb.velocity.y, -wallSlideSpeed, float.MaxValue));
+            _rb.velocity = new Vector2(_rb.velocity.x, Mathf.Clamp(_rb.velocity.y, -wallSlideSpeed, float.MaxValue));
         }
         else
         {
             isWallSliding = false;
         }
     }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void WallJump()
     {
@@ -199,11 +262,13 @@ public class PlayerMove : MonoBehaviour
             Invoke(nameof(StopWallJmp), wallJumpDuration);
         }
     }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void StopWallJmp()
     {
         isWallJumping = false;
     }
+    ////////////////////////////////////////////////////////////////////////////////////////////////////
 
     private void Flip()
     {
