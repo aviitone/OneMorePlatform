@@ -12,7 +12,17 @@ public class CameraFollow : MonoBehaviour
 
     private void Update()
     {
-        Vector3 targetPosition = target.position + offest;
-        transform.position = Vector3.SmoothDamp(transform.position, targetPosition, ref velocity, smoothTime);
+        if (target != null)
+        {
+            // Get the current position of the camera
+            Vector3 newPosition = transform.position;
+
+            // Only update the X position of the camera to follow the player
+            newPosition.x = target.position.x + offest.x;
+
+            // Apply the new position to the camera with smoothing
+            transform.position = Vector3.SmoothDamp(transform.position, newPosition, ref velocity, smoothTime);
+        }
     }
 }
+
